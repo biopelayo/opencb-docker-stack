@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # MongoDB
+  mongodb:
+    image: mongo:5.0
+    container_name: opencb-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-opencb}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-opencb_secure_pass}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-opencga}
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - opencb-network
+    restart: unless-stopped
+
+  # OpenSearch
+  opensearch:
+    image: opensearchproject/opensearch:2.5.0
+    container_name: opencb-opensearch
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms2g -Xmx2g"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_PASSWORD:-OpenSearch@123}
+      discovery.type: single-node
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks:
+      - opencb-network
+    restart: unless-stopped
+
+  # OpenCGA Backend
+  opencga:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opencb-opencga
+    ports:
+      - "8080:8080"
+    environment:
+      OPENCGA_DB_HOST: mongodb
+      OPENCGA_DB_PORT: 27017
+      OPENCGA_DB_USER: ${MONGO_ROOT_USER:-opencb}
+      OPENCGA_DB_PASSWORD: ${MONGO_ROOT_PASSWORD:-opencb_secure_pass}
+      OPENCGA_DB_NAME: ${MONGO_DATABASE:-opencga}
+      JAVA_OPTS: "-Xmx${OPENCGA_JAVA_MEMORY:-8g} -Xms4g"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - opencga_data:/opt/opencga/data
+      - opencga_logs:/opt/opencga/logs
+    depends_on:
+      - mongodb
+      - opensearch
+    networks:
+      - opencb-network
+    restart: unless-stopped
+
+  # Adminer (MongoDB GUI)
+  adminer:
+    image: adminer:latest
+    container_name: opencb-adminer
+    ports:
+      - "8081:8080"
+    depends_on:
+      - mongodb
+    networks:
+      - opencb-network
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  opensearch_data:
+  opencga_data:
+  opencga_logs:
+
+networks:
+  opencb-network:
+    driver: bridge
